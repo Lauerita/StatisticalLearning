@@ -1,5 +1,5 @@
 ---
-title: "Clustering Analysis Project 2"
+title: "Bullying in School Using Cluster Analysis"
 author: "Laura Hu"
 date: "2023-04-29"
 output:
