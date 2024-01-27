@@ -1,0 +1,419 @@
+---
+title: "Wine Quality Predicting"
+output: pdf_document
+date: "2022-12-04"
+author: "Casey Hernandez" "Laura Hu" "William Oh" "Kimberly Kao"
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(out.width = "70%", out.height="45%", fig.align="center", warning=FALSE, message=FALSE)
+knitr::opts_knit$set(global.par = TRUE,kable.force.latex = TRUE)
+asdf <- par(cex.main=1.5,cex.lab=1.5,cex.axis=1.5,pch=16,lwd=1.5)
+par(asdf)
+library("ggplot2")
+library("dplyr")
+
+library("ISLR")
+library("glmnet")
+
+library("gridExtra")
+library("expm")
+library("GGally")
+library("caret")
+library("modelr")
+library("ggfortify")
+library("olsrr")
+```
+
+## Load Data
+
+```{r}
+wine <- read.csv("C:/Users/Casey Hernandez/Documents/STA 4320 project/wine_train.csv")
+
+#View(wine)
+
+```
+
+## Split Data
+
+```{r}
+set.seed(1643)
+y <- wine$Country  
+train_index <- createDataPartition(y,times=1,p=0.7,list=FALSE)
+
+wine_train <- wine[train_index,]
+wine_test <- wine[-train_index,]
+
+```
+
+## Initial Observations
+
+```{r}
+names(wine_train)
+
+p <- ggplot(wine_train, aes(y=Rating))
+p1 <- p + geom_boxplot(aes(x=Country))
+p2 <- p + geom_point(aes(x=Price))
+p3 <- p + geom_point(aes(x=Year))
+p4 <- p + geom_point(aes(x=NumberOfRatings))
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+
+
+```
+
+## Check for transforms
+
+### Plots
+
+```{r}
+names(wine_train)
+
+p <- ggplot(wine_train, aes(y=sqrt(Rating)))
+p1 <- p + geom_boxplot(aes(x=Country))
+p2 <- p + geom_point(aes(x=Price))
+p3 <- p + geom_point(aes(x=Year))
+p4 <- p + geom_point(aes(x=NumberOfRatings))
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+
+
+```
+
+```{r}
+names(wine_train)
+
+p <- ggplot(wine_train, aes(y=log(Rating)))
+p1 <- p + geom_boxplot(aes(x=Country))
+p2 <- p + geom_point(aes(x=Price))
+p3 <- p + geom_point(aes(x=Year))
+p4 <- p + geom_point(aes(x=NumberOfRatings))
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+```
+
+```{r}
+## not this function
+fit <- lm(Rating ~ . - ID - Name - Region -Winery  +
+            NumberOfRatings +
+            Price +
+            Year, data = wine_train)
+autoplot(fit)
+
+fit <- lm(Rating ~ . - ID - Name - Region -Winery  +
+            log(NumberOfRatings) +
+            log(Price) +
+            log(Year), data = wine_train)
+autoplot(fit)
+
+
+fit <- lm(Rating ~ . - ID - Name - Region -Winery  +
+            sqrt(NumberOfRatings) +
+            log(Price) +
+            sqrt(Year), data = wine_train)
+autoplot(fit)
+
+fit <- lm(Rating ~ . - ID - Name  - Region -Winery +
+            sqrt(NumberOfRatings) +
+            log(Price) +
+            I(Year^2), data = wine_train)
+autoplot(fit)
+
+fit <- lm(Rating ~ . - ID - Name  - Region -Winery +
+            sqrt(NumberOfRatings) +
+            log(Price) +
+            I(Year^2), data = wine_train)
+autoplot(fit)
+
+```
+
+```{r}
+fit <- lm(Rating ~ . - ID - Name  - Region -Winery  +
+            I(NumberOfRatings^2) +
+            log(Price) +
+            I(Year^2), data = wine_train)
+autoplot(fit)
+
+
+
+fit <- lm(Rating^2 ~ . - ID - Name  - Region -Winery  +
+            log(NumberOfRatings) +
+            log(Price) , data = wine_train)
+autoplot(fit)
+
+fit <- lm(sqrt(Rating) ~ . - ID - Name  - Region -Winery  +
+            log(NumberOfRatings) +
+            log(Price) +
+            I(Year^2), data = wine_train)
+autoplot(fit)
+
+fit <- lm(I(Rating^2) ~ . - ID - Name  - Region -Winery  +
+            log(NumberOfRatings) +
+            log(Price) +
+            I(Year^2), data = wine_train)
+autoplot(fit)
+
+fit <- lm(Rating ~ . - ID - Name  - Region -Winery  +
+            log(NumberOfRatings) +
+            log(Price) +
+            I(Year^2), data = wine_train)
+autoplot(fit)
+```
+
+```{r}
+p <- ggplot(wine_train, aes(y=Rating, color=Country)) 
+
+p2 <- p + geom_jitter(aes(x=NumberOfRatings), size=0.75) + facet_wrap(vars(Country))
+p3 <- p + geom_jitter(aes(x=Price), size=0.75) + facet_wrap(vars(Country))
+p4 <- p + geom_jitter(aes(x=Year), size=0.75) + facet_wrap(vars(Country))
+
+grid.arrange(p2,p3,p4,ncol=2)
+```
+
+## Initial Start
+
+```{r}
+cv_control <- trainControl(method = "cv",number = 5 )
+
+set.seed(431879)  
+m0 <- train(Rating ~ . - ID - Name - Region -Winery , data = wine_train,trControl = cv_control, method = "lm")
+
+set.seed(431879)  # ensure splits are same for all models
+
+m1 <- train(Rating ~ . - ID - Name - Region -Winery  +log(NumberOfRatings) +log(Price) +I(Year^2),data = wine_train,trControl = cv_control, method = "lm")
+
+```
+
+```{r}
+wine_train_res <- wine_train %>% spread_residuals(m0, m1)
+```
+
+## By variable residual plot (without color)
+
+```{r}
+
+
+p <- ggplot(wine_train_res, aes(y=m0))
+p1 <- p + geom_boxplot(aes(x=Country))
+p2 <- p + geom_point(aes(x=Price))
+p3 <- p + geom_point(aes(x=Year))
+p4 <- p + geom_point(aes(x=NumberOfRatings))
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+```
+
+```{r}
+
+
+p <- ggplot(wine_train_res, aes(y=m0, color=Country))
+p2 <- p + geom_point(aes(x=Price), size=0.75) + facet_wrap(vars(Country))
+p3 <- p + geom_point(aes(x=Year), size=0.75) + facet_wrap(vars(Country))
+p4 <- p + geom_point(aes(x=NumberOfRatings), size=0.75) + facet_wrap(vars(Country))
+
+grid.arrange(p2,p3,p4,ncol=1)
+
+```
+
+```{r}
+
+
+p <- ggplot(wine_train_res, aes(y=m1))
+p1 <- p + geom_boxplot(aes(x=Country))
+p2 <- p + geom_point(aes(x=Price))
+p3 <- p + geom_point(aes(x=Year))
+p4 <- p + geom_point(aes(x=NumberOfRatings))
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+```
+
+```{r}
+
+
+p <- ggplot(wine_train_res, aes(y=m1, color=Country))
+p2 <- p + geom_point(aes(x=Price), size=0.75) + facet_wrap(vars(Country))
+p3 <- p + geom_point(aes(x=Year), size=0.75) + facet_wrap(vars(Country))
+p4 <- p + geom_point(aes(x=NumberOfRatings), size=0.75) + facet_wrap(vars(Country))
+
+grid.arrange(p2,p3,p4,ncol=1)
+
+```
+
+## Trying Interactions, then model selection
+
+```{r}
+
+lambda_grid <- 10^seq(-20, -2, length = 100)
+
+set.seed(431879) 
+
+lasso_0 <- train(Rating ~ (. - ID - Name-Country  - Region -Winery )*Year+ (. - ID - Name  - Region -Winery )*Country +log(NumberOfRatings) +log(Price) +I(Year^2), data = wine_train, trControl = cv_control, method = "glmnet",tuneGrid = expand.grid(alpha = 1, lambda = lambda_grid))
+
+plot(lasso_0)
+
+coef(lasso_0$finalModel, lasso_0$bestTune$lambda)
+
+
+
+```
+
+```{r}
+lambda_grid <- 10^seq(-5, -2, length = 100)
+
+
+set.seed(431879) 
+
+lasso_1 <- train(Rating ~ (. - ID - Name-Country  - Region -Winery )*Year+  (. - ID - Name  - Region -Winery )*Country +(log(NumberOfRatings) +log(Price) +I(Year^2))*Year, data = wine_train, trControl = cv_control, method = "glmnet",tuneGrid = expand.grid(alpha = 1, lambda = lambda_grid))
+
+plot(lasso_1)
+
+
+
+```
+
+```{r}
+
+coef(lasso_1$finalModel, lasso_1$bestTune$lambda)
+```
+
+```{r}
+lambda_grid <- 10^seq(-3, 0, length = 100)
+
+set.seed(431879)  
+
+ridge_0 <- train(Rating ~ (. - ID - Name-Country  - Region -Winery )*Year+(. - ID - Name - Region -Winery )*Country +log(NumberOfRatings) +log(Price) +I(Year^2),data = wine_train,trControl = cv_control,method = "glmnet",tuneGrid = expand.grid(alpha = 0, lambda = lambda_grid))
+
+plot(ridge_0, xTrans = log10)
+
+coef(ridge_0$finalModel, ridge_0$bestTune$lambda)
+
+```
+
+```{r}
+lambda_grid <- 10^seq(-5, -1, length = 100)
+
+set.seed(431879)  
+
+ridge_1 <- train( Rating ~ (. - ID - Name-Country  - Region -Winery )*Year+  (. - ID - Name  - Region -Winery )*Country +(log(NumberOfRatings) +log(Price) +I(Year^2))*Year, data = wine_train,trControl = cv_control,method = "glmnet",tuneGrid = expand.grid(alpha = 0, lambda = lambda_grid))
+
+plot(ridge_1)
+
+```
+
+```{r}
+
+coef(ridge_1$finalModel, ridge_1$bestTune$lambda)
+```
+
+## Model Selection (AIC)
+
+```{r}
+# Model Selection
+# 1. Fit the "full model".  Needs to be lm object
+
+full <- lm(Rating ~ (. - ID - Name-Country  - Region -Winery )*Year+  (. - ID - Name  - Region -Winery )*Country +(log(NumberOfRatings) +log(Price) +I(Year^2))*Year, data = wine_train)
+
+autoplot(full)
+```
+
+```{r}
+
+
+full <- lm(Rating ~ (. - ID - Name-Country  - Region -Winery )*Year+  (. - ID - Name  - Region -Winery )*Country +(log(NumberOfRatings) +log(Price) +I(Year^2))*Year, data = wine_train)
+
+summary(full)
+### 2a. Run ols_step_forward_aic (forward selection)
+
+mFS_res <- ols_step_forward_aic(full) #, progress=TRUE, details=TRUE)
+
+### 2b. Run ols_step_backward_aic (backward selection)
+
+mBS_res <- ols_step_backward_aic(full)
+
+### 2c. Run ols_step_best_subset
+# I ran this for a few minutes and it didn't finish.
+# Considers 2^37 = 137,438,953,470 possible models
+#BSS <- ols_step_best_subset(fit) 
+#ptm - proc.time()   # display time
+```
+
+```{r}
+# observe output of selection algorithms
+mFS_res
+mBS_res
+```
+
+```{r}
+# define models for assessment on test set
+mFS <- mFS_res$model
+mBS <- mBS_res$model
+```
+
+```{r}
+# Now, use "_test"
+
+wine_test <- wine_test %>% spread_predictions(m0, m1, lasso_0, lasso_1, ridge_0, ridge_1, full, mFS, mBS)
+
+
+
+rbind(c("m0", wine_test %>% yardstick::rmse(truth=Rating, estimate=m0)),+
+  c("m1", wine_test %>% yardstick::rmse(truth=Rating, estimate=m1)),+
+  c("lasso_0", wine_test %>% yardstick::rmse(truth=Rating, estimate=lasso_0)),+
+  c("lasso_1", awine_test %>% yardstick::rmse(truth=Rating, estimate=lasso_1)),+
+  c("ridge_0", wine_test %>% yardstick::rmse(truth=Rating, estimate=ridge_0)),+
+  c("ridge_1", wine_test %>% yardstick::rmse(truth=Rating, estimate=ridge_1)),+
+  c("full", wine_test %>% yardstick::rmse(truth=Rating, estimate=full)),+
+  c("mFS", wine_test %>% yardstick::rmse(truth=Rating, estimate=mFS)),+
+  c("mBS", wine_test %>% yardstick::rmse(truth=Rating, estimate=mBS)))
+
+```
+
+## Check Final Models
+
+### By variable residual plot
+
+```{r}
+wine_train_res <- wine_train %>% spread_residuals(lasso_1)
+
+p <- ggplot(wine_train_res, aes(y=lasso_1))
+p1 <- p + geom_boxplot(aes(x=Country))
+p2 <- p + geom_point(aes(x=Price), size=0.75)
+p3 <- p + geom_point(aes(x=Year), size=0.75)
+p4 <- p + geom_point(aes(x=NumberOfRatings), size=0.75)
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+```
+
+```{r}
+p <- ggplot(wine_train_res, aes(y=lasso_1, color=Country))
+p2 <- p + geom_point(aes(x=Price), size=0.75) + facet_wrap(vars(Country))
+p3 <- p + geom_point(aes(x=Year), size=0.75) + facet_wrap(vars(Country))
+p4 <- p + geom_point(aes(x=NumberOfRatings), size=0.75) + facet_wrap(vars(Country))
+
+grid.arrange(p2,p3,p4,ncol=1)
+```
+
+## Ultimate Predictions
+
+### Refit on full original data
+
+```{r}
+mFS_full <- lm(formula(lasso_1), data = wine)
+```
+
+```{r}
+#test_submission <- read.csv("C:/Users/Casey Hernandez/Documents/STA 4320 project/wine_test.csv")
+
+#test_submission <- test_submission %>% spread_predictions(lasso_1)
+
+#write.csv(test_submission, "C:/Users/Casey Hernandez/Documents/STA 4320 project/test_submission.csv")
+
+#test_submission <- test_submission %>% spread_predictions(lasso_1)
+
+#write.csv(test_submission, "C:/Users/Casey Hernandez/Documents/STA 4320 project/test_submission.csv")
+
+```

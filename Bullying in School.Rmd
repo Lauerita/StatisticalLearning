@@ -1,0 +1,240 @@
+---
+title: "Clustering Analysis Project 2"
+author: "Laura Hu"
+date: "2023-04-29"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load library
+
+```{r}
+library(ggplot2)
+library(ggfortify)
+library(GGally)
+library(dslabs)
+library(caret)
+library(modelr)
+library(yardstick)
+library(dplyr)
+library(gridExtra)
+library(clustMixType)
+```
+
+## Load Data
+
+```{r}
+Bully <- read.csv("~/Documents/School /bullying_2018_cleaned.csv")
+```
+
+# 
+
+## Initial feature edits to clean up the data
+
+```{r}
+
+#Delete the first row of the data frame and 
+Bully <-Bully %>% select(-X) %>% select(-record)
+Bully <- Bully[-1,]
+
+#Delete 'Physical_fighting_12_or_more' and 'Physically_attacked_12_or_more' because all variables are false. However, the vairable 'Physically_attacked_12_or_more' shows that there are plenty of students that reported 12.5. We want to change that. 
+
+Bully <-Bully %>% select(-Physical_fighting_12_or_more)
+
+Bully$Physically_attacked_12_or_more <- as.factor(ifelse(Bully$Physically_attacked < 12.1, 'False',
+ifelse(Bully$Physically_attacked < 13, 'True')))
+
+sum(is.na(Bully))
+```
+
+## Create Partition
+
+```{r}
+Bully <-Bully %>% select(-Bullied.outside.school) %>% select(-Cyber.Bullied)
+
+#Create partition (0.7 to 0.3)
+set.seed(123)
+trainIndex <- createDataPartition(Bully$Bullied.in.School, p = 0.7, 
+                                  list = FALSE,
+                                  time = 1)
+
+Bully$train <- FALSE 
+Bully$train[trainIndex] <- TRUE
+
+Bully_train <- Bully %>% filter(train == TRUE)
+Bully_test_1 <- Bully %>%filter(train == FALSE)
+
+```
+
+## Convert Categorical to Numeric for K-Means in the Training Set
+
+```{r}
+
+# Change categorical data to numeric 
+
+#Bullying 
+Bully_train$Bullied.in.School <- c(Yes = 1, No = 0)[Bully_train$Bullied.in.School]
+#Bully_train$Bullied.outside.school <- c(Yes = 1, No = 0)[Bully_train$Bullied.outside.school]
+#Bully_train$Cyber.Bullied <- c(Yes = 1, No = 0)[Bully_train$Cyber.Bullied]
+
+#Sex
+Bully_train$Sex <- c(Male = 1, Female = 0)[Bully_train$Sex]
+
+#Felt lonely 
+Bully_train$Most_of_the_time_or_always_felt_lonely <- c(Yes = 1, No = 0)[Bully_train$Most_of_the_time_or_always_felt_lonely]
+
+#Missed school or class without permission 
+Bully_train$Missed_classes_or_school_without_permission <- c(Yes = 1, No = 0)[Bully_train$Missed_classes_or_school_without_permission]
+
+#Close friends
+Bully_train$Close_friends_3_or_more <- c(True = 1, False = 0)[Bully_train$Close_friends_3_or_more]
+
+#Miss school no permission 
+Bully_train$Miss_school_no_permission <- c('0 days' = 0, '1 or 2 days' = 1.5, 	
+'3 to 5 days' = 4, '6 to 9 days' = 7.5, '10 or more days' = 10 )[Bully_train$Miss_school_no_permission]
+
+#Physcial Attack more than 12 times 
+Bully_train$Physically_attacked_12_or_more <- c('True' = 1, 'False' = 0)[Bully_train$Physically_attacked_12_or_more]
+
+```
+
+## Skewness
+
+We ran a series of plots to find out that **'Physically_attacked**', '**Physical_fighting**' are heavily skewed to the right. We need to do some transformations on them to wider the range.
+
+```{r}
+# Skew Physcial fighting 
+ggplot(Bully_train, aes(x = Physical_fighting)) + geom_density()
+Bully_train$Physical_fighting <- log(Bully_train$Physical_fighting + 1) 
+ggplot(Bully_train, aes(x = Physical_fighting)) + geom_density()
+
+#Skew Physically attacked 
+ggplot(Bully_train, aes(x = Physically_attacked)) + geom_density()
+Bully_train$Physically_attacked <- log(Bully_train$Physically_attacked+1)
+ggplot(Bully_train, aes(x = Physically_attacked )) + geom_density()
+       
+```
+
+## Scale data
+
+```{r}
+#scale all data
+Bully_train_scaled<- Bully_train%>% mutate(across(where(is.numeric), scale))
+Bully_train_scaled
+```
+
+## Cluster Analysis
+
+```{r}
+set.seed(123)
+within_ss <- rep(NA, 15)
+for (i in 1:15){
+  km_res <- kmeans(x = Bully_train_scaled,
+                  center = i,
+                  nstart = 5)
+  within_ss[i] <- km_res$tot.withinss
+}
+
+plot(1:15, within_ss, type = "b", ylab = "Objective Function", xlab = "# Clusters",
+main = "Scree Plot")
+
+```
+
+From the graph, we can see that two obvious choices are 9 and 11, we want to evaluate both choices
+
+### Cluster 9
+
+```{r}
+res_9 <- kmeans(Bully_train_scaled,
+                   centers = 9,
+                   nstart = 5)
+
+#Add the clusters into the original data frame
+result <- res_9$cluster
+result <- as.factor(result)
+size <- res_9$size
+size
+
+#New data frame that included the clustering results 
+Bully_trained_cluster_9 <- data.frame(Bully_train, result)
+
+#Visualize the clusters 
+ggplot(Bully_trained_cluster_9, aes(x = result, fill = factor(Bullied.in.School))) + geom_bar(position = "stack") + labs(fill = "Bullied in School") + scale_fill_manual(values = c("#DADAEB", "#9E9AC8"))
+
+View(Bully_trained_cluster_9)
+
+```
+
+### Cluster 13
+
+```{r}
+res_13 <- kmeans(Bully_train_scaled,
+                   centers = 11,
+                   nstart = 5)
+
+#Add the clusters into the original data frame
+result_13 <- res_13$cluster
+result_13 <- as.factor(result_13)
+size <- res_13$size
+size
+
+#New data frame that included the clustering results 
+Bully_trained_cluster_13 <- data.frame(Bully_train, result_13)
+
+#Visualize the clusters 
+ggplot(Bully_trained_cluster_13, aes(x = result_13, fill = factor(Bullied.in.School))) + geom_bar(position = "stack") + labs(fill = "Bullied in School") + scale_fill_manual(values = c("#DADAEB", "#9E9AC8"))
+
+```
+
+We choose **9 clusters** for our prediction because it's easier, additional clusters only reinforces the information that can be found in cluster 9 which can overcomplicate the classification process.
+
+From the graph above, we can see that **cluster 1** are all bullied in school, **cluster 3,4,5** are not at all bullied in school (there's a small portion of cluster 4 that are bullied, but that does not really affect the classification process by much)
+
+We want to focus more on [cluster 2,6,7,8 and 9]{.underline}. Cluster 2 and 9 only has a small portion that are bullied, cluster 7,8 has a little bit less than half, cluster 6 has just about half.
+
+## Visualization of the clusters
+
+To further investigate the characteristics of bullying, we want to visualize the each clusters.
+
+( Because most of the data points are discrete, it is hard to visualize. I tried using bubble chart, but I cannot find any good indicator as to why those groups were bullied. )
+
+### Physically Attacked
+
+```{r}
+Bully_trained_cluster_9$Bullied.in.School <- as.factor(Bully_trained_cluster_9$Bullied.in.School)
+
+ggplot(Bully_trained_cluster_9, aes(x = result, fill = factor(Physically_attacked))) + geom_bar(position = "stack") + labs(fill = "Physically_attacked") 
+
+ggplot(Bully_trained_cluster_9, aes(x = result, y = Custom_Age, size = factor(Physically_attacked), col = as.factor(Bullied.in.School))) + geom_point(alpha = 0.3) + scale_size_manual(values = c(0.001 , 1, 3, 5, 7, 9, 11, 13))
+
+```
+
+### Physical fighting
+
+```{r}
+Bully_trained_cluster_9$Bullied.in.School <- as.factor(Bully_trained_cluster_9$Bullied.in.School)
+
+ggplot(Bully_trained_cluster_9, aes(x = result, fill = factor(Physical_fighting))) + geom_bar(position = "stack") + labs(fill = "Physical fighting") 
+
+ggplot(Bully_trained_cluster_9, aes(x = result, y = Custom_Age, size = factor(Physical_fighting), col = as.factor(Bullied.in.School))) + geom_point(alpha = 0.3) + scale_size_manual(values = c(0.001 , 1, 3, 5, 7, 9, 11, 13))
+
+ggplot(Bully_trained_cluster_9, aes(x = result, y = Bully_trained_cluster_9$Physical_fighting, fill = result)) + geom_boxplot()
+```
+
+```{r}
+
+ggplot(Bully_trained_cluster_9, aes(x = Felt_lonely, fill = factor(Bullied.in.School))) + geom_bar(position = "stack") + labs(fill = "Bullied.in.School") 
+
+ggplot(Bully_trained_cluster_9, aes(x = result, y = Custom_Age, size = factor(Physical_fighting), col = as.factor(Bullied.in.School))) + geom_point(alpha = 0.3) + scale_size_manual(values = c(0.001 , 1, 3, 5, 7, 9, 11, 13))
+```
+
+```{r}
+ggplot(Bully_trained_cluster_9, aes(x = result, fill = factor(Felt_lonely))) + geom_bar(position = "stack") + labs(fill = "Felt_lonely") 
+
+ggplot(Bully_trained_cluster_9, aes(x = result, y = Felt_lonely, col = as.factor(Bullied.in.School))) + geom_point(alpha = 0.3)
+```
