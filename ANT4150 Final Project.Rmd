@@ -1,0 +1,475 @@
+---
+title: "ANT4150 Final Project"
+author: "Laura Hu"
+date: "2024-05-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Load packages 
+library(plyr)
+library(dplyr)
+library(ggplot2)
+
+#import libraries 
+library(readr)
+master_data <- read_csv("master_anon_ANT4150.csv",
+ col_types = cols_only(
+ sex = col_guess(),
+ period = col_guess(), 
+ age = col_guess(), 
+ grave.goods = col_guess(), 
+ location = col_guess(),  
+ burial = col_guess(),
+ l.vo = col_guess(),
+ l.voa = col_guess(),
+ Zp.left = col_guess(),
+ Zp.right = col_guess()),
+ na = "NA")
+
+#View(master_data)
+
+master_data$sex <- as.factor(master_data$sex)
+master_data$age <- as.factor(master_data$age)
+master_data$period <- as.factor(master_data$period)
+master_data$location <- as.factor(master_data$location)
+master_data$burial <- as.factor(master_data$burial)
+
+```
+
+## Preliminary Work
+
+-   feature engineering
+
+-   normality check
+
+```{r}
+
+data_nona_vo_voa <- master_data[!is.na(master_data$l.vo) & !is.na(master_data$l.voa),]
+
+ggplot(data_nona_vo_voa, aes(x = Zp.left, y = Zp.right)) + geom_point()
+# Based on the graph, we can say that Zp.left and right about the same 
+## Do we need to run t-test to see??
+
+
+# Set a new variable that combines the average of left and right 
+data_nona_vo_voa <- data_nona_vo_voa %>% mutate(avg_Zp = (Zp.left + Zp.right)/2)
+
+for ( i in 1:nrow(data_nona_vo_voa)){
+  if (is.na(data_nona_vo_voa$Zp.left[i]) == TRUE & is.na(data_nona_vo_voa$Zp.right[i]) == FALSE){
+  data_nona_vo_voa$avg_Zp[i] = data_nona_vo_voa$Zp.right[i]
+  } else if (is.na(data_nona_vo_voa$Zp.left[i]) == FALSE & is.na(data_nona_vo_voa$Zp.right[i]) == TRUE){
+  data_nona_vo_voa$avg_Zp[i] = data_nona_vo_voa$Zp.left[i]
+  }
+  
+}
+
+# delete all data that are not avaliable for both femurs 
+data_nona_vo_voa <- data_nona_vo_voa[!is.na(data_nona_vo_voa$avg_Zp),]
+
+
+# Normality Check 
+ggplot(data_nona_vo_voa, aes(sample = avg_Zp)) + stat_qq() + stat_qq_line() # Average Zp score is relatively normally distributed
+ggplot(data_nona_vo_voa, aes(sample = l.vo)) + stat_qq() + stat_qq_line() # The reason why the graphs look like this is because they are in percentages and therefore is more discrete.
+ggplot(data_nona_vo_voa, aes(sample = l.voa)) + stat_qq() + stat_qq_line()
+
+
+# See the distribution of l.vo and l.voa
+ggplot(data_nona_vo_voa, aes(x = avg_Zp)) + geom_histogram()
+ggplot(data_nona_vo_voa, aes(x = l.vo)) + geom_histogram()
+ggplot(data_nona_vo_voa, aes(x = l.voa)) + geom_histogram()
+
+# See the relationship between l.vo and l.voa 
+ggplot(data_nona_vo_voa, aes(x = l.voa, y = l.vo)) + geom_point()
+
+
+
+```
+
+## Initial Data Observation
+
+### Average Zp Analysis
+
+Average Zp score for each nominal variables (Vince has the analysis)
+
+```{r}
+ggplot(data_nona_vo_voa, aes(x = sex, y = avg_Zp, col = sex)) + geom_boxplot()
+Zp_sex_summary <- ddply(data_nona_vo_voa, c("sex"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+Zp_sex_summary
+
+ggplot(data_nona_vo_voa, aes(x = age, y = avg_Zp, col = age)) + geom_boxplot()
+Zp_age_summary <- ddply(data_nona_vo_voa, c("age"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+Zp_age_summary
+
+ggplot(data_nona_vo_voa, aes(x = location, y = avg_Zp, col = location)) + geom_boxplot()
+Zp_location_summary <- ddply(data_nona_vo_voa, c("location"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+Zp_location_summary
+
+ggplot(data_nona_vo_voa, aes(x = burial, y = avg_Zp, col = burial)) + geom_boxplot()
+Zp_burial_summary <- ddply(data_nona_vo_voa, c("burial"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+Zp_burial_summary # test needed 
+
+ggplot(data_nona_vo_voa, aes(x = period, y = avg_Zp, col = period)) + geom_boxplot()
+Zp_period_summary <- ddply(data_nona_vo_voa, c("period"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+Zp_period_summary
+
+ggplot(data_nona_vo_voa, aes(x = grave.goods, y = avg_Zp, col = grave.goods)) + geom_boxplot()
+Zp_grave_summary <- ddply(data_nona_vo_voa, c("grave.goods"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+Zp_grave_summary # test needed 
+
+```
+
+### Lumbar Vo Analysis
+
+```{r}
+ggplot(data_nona_vo_voa, aes(x = l.vo, col = sex)) + geom_histogram() +
+  facet_wrap(~sex)
+lvo_sex_summary <- ddply(data_nona_vo_voa, c("sex"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+lvo_sex_summary
+# It is hard to tell from the box plot, but female has a higher lumbar vo mean than males 
+
+ggplot(data_nona_vo_voa, aes(x = l.vo, col = age)) + geom_histogram() +
+  facet_wrap(~age)
+lvo_age_summary <- ddply(data_nona_vo_voa, c("age"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+lvo_age_summary
+# Boxplot is not the best visual for analysis, hence we want to use histogram to represent the visual. The average of the middle age group has about 12% average in lumbar%, young age group has no lumbar vo at all, older age group has about 12.5% avergae in lumbar vo%. 
+
+ggplot(data_nona_vo_voa, aes(x = l.vo, col = location)) + geom_histogram() +
+  facet_wrap(~location)
+lvo_location_summary <- ddply(data_nona_vo_voa, c("location"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+lvo_location_summary
+# Use histogram, people who were buried at church has no lumbar vo, people who buried at churchyard has about 8% average in lumbar vo, and people who were buried at monastic has about 18% average in lumbar vo. The average of monastic is skewed by that one person with 100% lumbar vo. 
+
+ggplot(data_nona_vo_voa, aes(x = l.vo, col = burial)) + geom_histogram() +
+  facet_wrap(~burial)
+lvo_burial_summary <- ddply(data_nona_vo_voa, c("burial"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+lvo_burial_summary
+# Use histogram, people who were buried earthen has about 7% lumbar vo, while people who buried at tomb has about 13% lumbar vo on average. People who are buried in tomb has more individuals with higher lumbar vo% than those who were buried earthen. 
+
+ggplot(data_nona_vo_voa, aes(x = l.vo, col = period)) + geom_histogram() +
+  facet_wrap(~period)
+lvo_period_summary <- ddply(data_nona_vo_voa, c("period"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+lvo_period_summary
+# Use histogram, the 3 individuals from the Central medeval has no lumbar vo, from the Early medeval there is one individual with 100% lumbar vo and the rest of them at most 25%. Most data are from the Late medeval time, the average is about 8% lumbar vo on average. 
+
+
+ggplot(data_nona_vo_voa, aes(x = l.vo, col = grave.goods)) + geom_histogram() +
+  facet_wrap(~grave.goods)
+lvo_grave_summary <- ddply(data_nona_vo_voa, c("grave.goods"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+lvo_grave_summary
+# Use histogram, people with no grave goods have about 12.5% of lumbar vo on average, people with grave goods have no lumbar vo at all. 
+```
+
+### Lumbar VoA Analysis
+
+```{r}
+ggplot(data_nona_vo_voa, aes(x = l.voa, col = sex)) + geom_histogram() +
+  facet_wrap(~sex)
+lvoa_sex_summary <- ddply(data_nona_vo_voa, c("sex"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+lvoa_sex_summary
+# Females had a slight higher average than males, a lot of females who have lumbar voa have them around 25% - 80%, and males who have lumbar voa have them around 15% - 55%, there is one extreme case of 100%. Note the one who has 100% voa does not 100% vo. 
+
+
+ggplot(data_nona_vo_voa, aes(x = l.voa, col = age)) + geom_histogram() +
+  facet_wrap(~age)
+lvoa_age_summary <- ddply(data_nona_vo_voa, c("age"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+lvoa_age_summary
+# The old age group has the highest lumbar voa, which is around 23%, and those who have lumbar voa had between 35% - 80%. The middle age ground has around 15.6% in average, and those who had it has it between 20% - 65% with 1 extreme cases of 100%. There are around 7 younger individuals that had about 20% of lumbar voa, which is something worth investigating. 
+
+
+ggplot(data_nona_vo_voa, aes(x = location, y = l.voa, col = location)) + geom_boxplot()
+ggplot(data_nona_vo_voa, aes(x = l.voa, col = location)) + geom_histogram() +
+  facet_wrap(~location)
+lvoa_location_summary <- ddply(data_nona_vo_voa, c("location"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+lvoa_location_summary
+# There are 4 people buried in church and only 1 of them has no lumbar voa, the rest has around 25% of lumbar voa. Those who were buried in the church yard has about 14% lumbar voa on average, majority of them do not have voa. Those who were buried in Monastic has the expected value of 17.5%, those who have the disease has about 20% - 50% lumbar voa. 
+
+
+ggplot(data_nona_vo_voa, aes(x = burial, y = l.voa, col = burial)) + geom_boxplot()
+ggplot(data_nona_vo_voa, aes(x = l.voa, col = burial)) + geom_histogram() +
+  facet_wrap(~burial)
+lvoa_burial_summary <- ddply(data_nona_vo_voa, c("burial"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+lvoa_burial_summary
+
+
+ggplot(data_nona_vo_voa, aes(x = period, y = l.voa, col = period)) + geom_boxplot()
+ggplot(data_nona_vo_voa, aes(x = l.voa, col = period)) + geom_histogram() +
+  facet_wrap(~period)
+lvoa_period_summary <- ddply(data_nona_vo_voa, c("period"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+lvoa_period_summary
+
+
+ggplot(data_nona_vo_voa, aes(x = grave.goods, y = l.voa, col = grave.goods)) + geom_boxplot()
+ggplot(data_nona_vo_voa, aes(x = l.voa, col = grave.goods)) + geom_histogram() +
+  facet_wrap(~grave.goods)
+lvoa_grave_summary <- ddply(data_nona_vo_voa, c("grave.goods"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+lvoa_grave_summary
+
+
+```
+
+## Linear Regression
+
+### Between Zp and l.Vo
+
+```{r}
+# Deleted excpetion to avoid skewing the data, the ones deleted will be analyzed later
+data_no_full <- data_nona_vo_voa%>% filter(l.vo != 100)%>% filter(l.voa != 100)
+
+ggplot(data_no_full, aes(x = l.vo, y = avg_Zp, col = sex)) + geom_point() + geom_smooth(method = "lm") +
+  facet_wrap(~sex)
+
+ggplot(data_no_full, aes(x = l.vo, y = avg_Zp, col = age)) + geom_point() + geom_smooth(method = "lm") +
+  facet_wrap(~age)
+# Not too significant 
+
+ggplot(data_no_full, aes(x = l.vo, y = avg_Zp, col = period)) + geom_point() + geom_smooth(method = "lm") +
+  facet_wrap(~period)
+
+ggplot(data_no_full, aes(x = l.vo, y = avg_Zp, col = location)) + geom_point() + geom_smooth(method = "lm") +
+  facet_wrap(~location)
+
+ggplot(data_no_full, aes(x = l.vo, y = avg_Zp, col = burial)) + geom_point() + geom_smooth(method = "lm") +
+  facet_wrap(~burial)
+
+ggplot(data_no_full, aes(x = l.vo, y = avg_Zp, col = grave.goods)) + geom_point() + geom_smooth(method = "lm") +
+  facet_wrap(~grave.goods)
+
+```
+
+### Between Zp and l.VoA
+
+```{r}
+ggplot(data_no_full, aes(x = l.voa, y = avg_Zp, col = sex)) + geom_jitter() + geom_smooth(method = "lm") +
+  facet_wrap(~sex)
+
+ggplot(data_no_full, aes(x = l.voa, y = avg_Zp, col = age)) + geom_jitter() + geom_smooth(method = "lm") +
+  facet_wrap(~age)
+# Not too significant 
+
+ggplot(data_no_full, aes(x = l.voa, y = avg_Zp, col = period)) + geom_jitter() + geom_smooth(method = "lm") +
+  facet_wrap(~period)
+
+ggplot(data_no_full, aes(x = l.voa, y = avg_Zp, col = location)) + geom_jitter() + geom_smooth(method = "lm") +
+  facet_wrap(~location)
+
+ggplot(data_no_full, aes(x = l.voa, y = avg_Zp, col = burial)) + geom_jitter() + geom_smooth(method = "lm") +
+  facet_wrap(~burial)
+
+ggplot(data_no_full, aes(x = l.voa, y = avg_Zp, col = grave.goods)) + geom_jitter() + geom_smooth(method = "lm") +
+  facet_wrap(~grave.goods)
+
+ggplot(data_no_full, aes(x = l.voa, y=l.vo)) + geom_jitter() + geom_smooth(method = "lm") 
+```
+
+## Correlation Coefficient
+
+### Between Zp and l.VoA
+
+```{r}
+
+data_no_full %>%
+  filter(period == 'Late')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+
+data_no_full %>%
+  filter(sex == 'M')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(sex == 'F')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(age == 'Middle')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(age == 'Old')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(age == 'Young')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(location == 'churchyard')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+
+data_no_full %>%
+  filter(burial == 'tomb')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(grave.goods == 'no')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+
+data_no_full %>%
+  filter(grave.goods == 'yes')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+```
+
+### Between Zp and l.Vo
+
+```{r}
+data_no_full %>%
+  filter(period == 'Late')%>%
+  select(l.vo, avg_Zp)%>%
+  cor()
+
+
+data_no_full %>%
+  filter(sex == 'M')%>%
+  select(l.vo, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(age == 'Middle')%>%
+  select(l.vo, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(location == 'churchyard')%>%
+  select(l.vo, avg_Zp)%>%
+  cor()
+
+
+data_no_full %>%
+  filter(burial == 'tomb')%>%
+  select(l.voa, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  filter(grave.goods == 'no')%>%
+  select(l.vo, avg_Zp)%>%
+  cor()
+
+data_no_full %>%
+  select(l.vo, l.voa)%>%
+  cor()
+
+
+```
+
+Middle age and tomb has the most linear association between L.vo/L.voa and average Zp score.
+
+## Cluster Analysis
+
+We deicded to use hierarchical clustering with complete and average linkage
+
+```{r}
+sd.data <- data_nona_vo_voa%>% select(-Zp.left)%>% select(-Zp.right)
+
+hc.complete <- hclust(dist(sd.data), method = "complete")
+plot(hc.complete, main = "Complete Linkage")
+abline(h = 900, col = "red") # I made the decision to cut it at h = 900 which leaves the dendrogram with 7 clusters.  
+
+hc.average <- hclust(dist(sd.data), method = "average")
+plot(hc.average, main = "Average Linkage")
+abline(h = 700, col = "red") # I made the decision to cut it at h = 700, whcih leaves the dendrogram with 5 clusters 
+
+
+```
+
+Adding clusters into the data frame
+
+```{r}
+# Now we want to assign each cluster to the main dataframe 
+
+h.cluster.comp <- cutree(hc.complete, 7)
+data_nona_vo_voa <- data_nona_vo_voa %>% mutate(h.cluster.comp)
+data_nona_vo_voa$h.cluster.comp <- as.factor(data_nona_vo_voa$h.cluster.comp)
+
+h.cluster.avg <- cutree(hc.average, 5)
+data_nona_vo_voa <- data_nona_vo_voa %>% mutate(h.cluster.avg)
+data_nona_vo_voa$h.cluster.avg <- as.factor(data_nona_vo_voa$h.cluster.avg)
+
+
+hc.complete <- as.dendrogram(hc.complete)
+hc.average <- as.dendrogram(hc.average)
+
+library(dendextend)
+dl <- dendlist(highlight_branches(hc.complete), highlight_branches(hc.average))
+tanglegram(dl, sort = TRUE, common_subtrees_color_branches = TRUE)
+```
+
+```{r}
+# the size of each cluster
+table(data_nona_vo_voa$h.cluster.comp)
+
+table(data_nona_vo_voa$h.cluster.avg)
+```
+
+### Complete Linkage Analysis
+
+```{r}
+ggplot(data_nona_vo_voa, aes(x = h.cluster.comp, y= avg_Zp, col = h.cluster.comp)) + geom_boxplot()
+
+cluster.comp.summary.lvoa <- ddply(data_nona_vo_voa, c("h.cluster.comp"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+cluster.comp.summary.lvoa
+
+cluster.comp.summary.lvo <- ddply(data_nona_vo_voa, c("h.cluster.comp"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+cluster.comp.summary.lvo
+
+cluster.comp.summary.zp <- ddply(data_nona_vo_voa, c("h.cluster.comp"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+cluster.comp.summary.zp
+
+ggplot(data_nona_vo_voa, aes(x = sex, fill = sex)) + geom_bar() + facet_wrap(~h.cluster.comp)
+
+ggplot(data_nona_vo_voa, aes(x = age, fill = age)) + geom_bar() + facet_wrap(~h.cluster.comp)
+
+ggplot(data_nona_vo_voa, aes(x = period, fill = period)) + geom_bar() + facet_wrap(~h.cluster.comp)
+
+ggplot(data_nona_vo_voa, aes(x = burial, fill = burial)) + geom_bar() + facet_wrap(~h.cluster.comp)
+
+ggplot(data_nona_vo_voa, aes(x = location, fill = location)) + geom_bar() + facet_wrap(~h.cluster.comp)
+
+ggplot(data_nona_vo_voa, aes(x = grave.goods, fill = grave.goods)) + geom_bar() + facet_wrap(~h.cluster.comp)
+
+```
+
+### Average Linkage Analysis
+
+```{r}
+ggplot(data_nona_vo_voa, aes(x = h.cluster.avg, y= avg_Zp, col = h.cluster.avg)) + geom_boxplot()
+
+cluster.avg.summary.lvoa <- ddply(data_nona_vo_voa, c("h.cluster.avg"), summarise, N = length(l.voa), mean = mean(l.voa), median = median(l.voa), sd = sd(l.voa))
+cluster.avg.summary.lvoa
+
+cluster.avg.summary.lvo <- ddply(data_nona_vo_voa, c("h.cluster.avg"), summarise, N = length(l.vo), mean = mean(l.vo), median = median(l.vo), sd = sd(l.vo))
+cluster.avg.summary.lvo
+
+cluster.comp.summary.zp <- ddply(data_nona_vo_voa, c("h.cluster.avg"), summarise, N = length(avg_Zp), mean = mean(avg_Zp), median = median(avg_Zp), sd = sd(avg_Zp))
+cluster.comp.summary.zp
+
+ggplot(data_nona_vo_voa, aes(x = sex, fill = sex)) + geom_bar() + facet_wrap(~h.cluster.avg)
+
+ggplot(data_nona_vo_voa, aes(x = age, fill = age)) + geom_bar() + facet_wrap(~h.cluster.avg)
+
+ggplot(data_nona_vo_voa, aes(x = period, fill = period)) + geom_bar() + facet_wrap(~h.cluster.avg)
+
+ggplot(data_nona_vo_voa, aes(x = burial, fill = burial)) + geom_bar() + facet_wrap(~h.cluster.avg)
+
+ggplot(data_nona_vo_voa, aes(x = location, fill = location)) + geom_bar() + facet_wrap(~h.cluster.avg)
+
+ggplot(data_nona_vo_voa, aes(x = grave.goods, fill = grave.goods)) + geom_bar() + facet_wrap(~h.cluster.avg)
+```
